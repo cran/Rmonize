@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 #  
 #  library(Rmonize)
 #  # If you need help with the package, please use:
-#  Rmonize_help()
+#  Rmonize_website()
 #  
 #  # Downloadable templates are available here
 #  Rmonize_templates()
