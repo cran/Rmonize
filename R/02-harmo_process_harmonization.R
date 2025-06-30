@@ -2,35 +2,35 @@
 #' Generate harmonized dataset(s) and associated metadata
 #'
 #' @description
-#' Reads a DataSchema and Data Processing Elements to generate a 
-#' harmonized dossier from input dataset(s) in a dossier and associated 
-#' metadata. The function 
-#' has one argument that can optionally be declared by the user 
-#' (`unique_col_dataset`). It refers to the columns which contains name of 
-#' each harmonized dataset. These two columns are added to ensure that there 
+#' Reads a DataSchema and Data Processing Elements to generate a
+#' harmonized dossier from input dataset(s) in a dossier and associated
+#' metadata. The function
+#' has one argument that can optionally be declared by the user
+#' (`unique_col_dataset`). It refers to the columns which contains name of
+#' each harmonized dataset. These two columns are added to ensure that there
 #' is always a unique entity identifier when datasets are pooled.
-#'
+#' 
 #' @details
-#' A dossier is a named list containing one or more data frames, which are 
-#' input datasets. The name of each data frame in the dossier will be used as 
+#' A dossier is a named list containing one or more data frames, which are
+#' input datasets. The name of each data frame in the dossier will be used as
 #' the name of the associated harmonized dataset produced by [harmo_process()].
-#'
-#' A DataSchema is the list of core variables to generate across datasets and 
-#' related metadata. A DataSchema object is a list of data frames with elements 
-#' named 'Variables' (required) and 'Categories' (if any). The 'Variables' 
-#' element must contain at least the `name` column, and the 'Categories' 
-#' element must contain at least the `variable` and `name` columns to be usable 
-#' in any function. In 'Variables' the `name` column must also have unique 
-#' entries, and in 'Categories' the combination of `variable` and `name` columns 
-#' must also be unique. 
-#'
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' 
+#' A DataSchema is the list of core variables to generate across datasets and
+#' related metadata. A DataSchema object is a list of data frames with elements
+#' named 'Variables' (required) and 'Categories' (if any). The 'Variables'
+#' element must contain at least the `name` column, and the 'Categories'
+#' element must contain at least the `variable` and `name` columns to be usable
+#' in any function. In 'Variables' the `name` column must also have unique
+#' entries, and in 'Categories' the combination of `variable` and `name` columns
+#' must also be unique.
+#' 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param object Data frame(s) or list of data frame(s) containing input 
@@ -38,41 +38,37 @@
 #' @param dataschema A DataSchema object.
 #' @param data_proc_elem A Data Processing Elements object.
 #' @param harmonized_col_dataset A character string identifying the column 
-#' to use for dataset names. NULL by default.
+#' to use for dataset names.
 #' @param harmonized_col_id A character string identifying the name of the 
-#' column present in every dataset to use as a dataset identifier. 
-#' NULL by default.
+#' column present in every dataset to use as a participant identifier.
 #' @param .debug Allow user to test the inputs before processing harmonization.
-#' @param dossier `r lifecycle::badge("deprecated")`
 #'
 #' @returns
-#' A list of data frame(s), containing harmonized dataset(s). The DataSchema 
-#' and Data Processing Elements are preserved as attributes of the 
-#' output harmonized dossier.
+#' A list of data frame(s) containing harmonized dataset(s).
+#' The DataSchema and Data Processing Elements are preserved as attributes of
+#' the harmonized dossier.
 #'
 #' @examples
-#' {
-#' 
-#' # Use Rmonize_DEMO to run examples.
+#' \donttest{
+#' # Use Rmonize_examples to run examples.
 #' 
 #' library(dplyr)
-#' library(madshapR) # data_dict_filter
+#' library(stringr)
+#' library(lubridate)
 #' 
-#' dataset_MELBOURNE <- Rmonize_DEMO$dataset_MELBOURNE[1]
-#' dossier <- dossier_create(list(dataset_MELBOURNE))
+#' # Perform data processing
+#' dossier <- Rmonize_examples[str_detect(names(Rmonize_examples),"input_dataset_study")]
+#' names(dossier) <- str_remove(names(dossier), "input_")
+#' dataschema <- Rmonize_examples$`DataSchema`
+#' data_proc_elem <- Rmonize_examples$`Data_Processing_Elements_no_errors`
 #' 
-#' dataschema <- 
-#'   Rmonize_DEMO$`dataschema - final` %>%
-#'   data_dict_filter('name == "adm_unique_id"')
-#' 
-#' data_proc_elem <- Rmonize_DEMO$`data_processing_elements - final` %>%
-#'   dplyr::filter(dataschema_variable == 'adm_unique_id',
-#'          input_dataset == 'dataset_MELBOURNE')
-#' 
-#' # perform harmonization
-#' harmonized_dossier <- harmo_process(dossier,dataschema,data_proc_elem)
-#' glimpse(harmonized_dossier)
-#' 
+#' harmonized_dossier <- harmo_process(
+#'   dossier,
+#'   dataschema,
+#'   data_proc_elem,
+#'   harmonized_col_dataset = 'adm_study_id')
+#'   
+#' glimpse(harmonized_dossier$dataset_study1)
 #' }
 #'
 #' @import dplyr tidyr fabR stringr
@@ -84,35 +80,33 @@
 #'
 #' @export
 harmo_process <- function(
-    object = NULL,
-    dataschema = attributes(dossier)$`Rmonize::DataSchema`,
-    data_proc_elem = attributes(dossier)$`Rmonize::Data Processing Elements`,
-    harmonized_col_dataset = attributes(dossier)$`Rmonize::harmonized_col_dataset`,
-    harmonized_col_id = attributes(dossier)$`Rmonize::harmonized_col_id`,
-    .debug = FALSE,
-    dossier = object
-    ){
+    object,
+    dataschema = attributes(object)$`Rmonize::DataSchema`,
+    data_proc_elem = attributes(object)$`Rmonize::Data Processing Elements`,
+    harmonized_col_dataset = attributes(object)$`Rmonize::harmonized_col_dataset`,
+    harmonized_col_id = attributes(object)$`Rmonize::harmonized_col_id`,
+    .debug = FALSE
+){
   
   # future dev
   # si le vT n'existe pas dans le Data Processing Elements, aller le chercher 
   # dans le DataSchema
   # controle de version ?
   
-  if(is.null(object)) object <- dossier
-  if(is.null(dossier)) dossier <- object
+  dossier <- object
   
   if(.debug == FALSE){
     
     # check arguments
     if(is.null(object) | is.null(dataschema) | is.null(data_proc_elem))
       stop(call. = FALSE,
-"
+           "
 
 `object`, `dataschema` and `data_proc_elem` are mandatory and must be provided.
 If you want to allow the code to run, you can specify 
 harmo_process(object, dataset, dataprocelem, .debug = TRUE) to test your
 input elements before processing harmonization.")
-
+    
   }
   
   add_index_dossier <- function(dossier){
@@ -122,8 +116,6 @@ input elements before processing harmonization.")
     
     col_ids <- 
       dossier %>% lapply(function(x) col_id(x)) %>% unique
-    
-
     
     if(length(col_ids) > 1 | is.null(col_ids[[1]])){
       for(i in names(dossier)){
@@ -143,7 +135,7 @@ input elements before processing harmonization.")
       }}
     return(dossier)
   }
-    
+  
   data_proc_elem_get <- function(dossier){
     
     bind_dossier_names <- 
@@ -156,7 +148,7 @@ input elements before processing harmonization.")
       dossier %>% 
       lapply(function(x) nrow(x)) %>%
       unlist() %>% sum
-      # bind_rows() %>%
+    # bind_rows() %>%
     
     bind_dossier <- tibble(.rows = total_len)
     
@@ -166,7 +158,7 @@ input elements before processing harmonization.")
       cols_to_bind <- 
         dossier %>%
         lapply(function(x) select(x,any_of(bind_dossier_names[[i]])))
-        
+      
       bound_cols <- silently_run(bind_rows(cols_to_bind))
       
       if(class(bound_cols)[[1]] == 'try-error'){
@@ -176,11 +168,11 @@ input elements before processing harmonization.")
           bind_rows() %>%
           valueType_self_adjust()}
       
-        bind_dossier <- bind_dossier %>% bind_cols(bound_cols)
+      bind_dossier <- bind_dossier %>% bind_cols(bound_cols)
     }
-        
+    
     dataschema <- data_dict_extract(bind_dossier)
-      
+    
     data_proc_elem <-
       tibble(
         index = as.integer(),
@@ -209,23 +201,28 @@ input elements before processing harmonization.")
           ),
           `Mlstr_harmo::algorithm` = .data$`Mlstr_harmo::rule_category`) %>%
         add_index(.force = TRUE)  %>%
-        select(-'label')
+        select(
+          "index","dataschema_variable","valueType",
+          "input_dataset","input_variables",
+          "Mlstr_harmo::rule_category",
+          "Mlstr_harmo::algorithm")
       
       data_proc_elem <- bind_rows(data_proc_elem,data_proc_elem_i)
       
     }
-      
+    
     data_proc_elem <- as_data_proc_elem(data_proc_elem)
     return(data_proc_elem)
   }
-
+  
   extract_var <- function(x){
     x <- x %>%
       str_replace_all('"',"`") %>%
       str_replace_all("'","`") %>%
       str_remove_all("`") %>%
-      str_squish()
+      str_squish() 
     x = x[!is.na(x)]
+    x = x[nchar(x) > 0]
     
     return(x)}
   
@@ -235,6 +232,7 @@ input elements before processing harmonization.")
     stop(call. = FALSE,'
 This object is a Data Processing Elements. 
 Please write harmo_process(data_proc_elem = my_object) instead.')
+  
   
   if(is_dataschema(object)) 
     stop(call. = FALSE,'
@@ -251,7 +249,6 @@ Please write harmo_process(dataschema = my_object) instead.')
         as_data_proc_elem(data_proc_elem)
   
   # create dossier from data proc elem.
-  
   if(is.null(object) & !is.null(data_proc_elem)){
     
     data_proc_elem <- as_data_proc_elem(data_proc_elem)
@@ -261,7 +258,7 @@ Please write harmo_process(dataschema = my_object) instead.')
     
     for(i in name_datasets){
       # stop()}
-      
+       
       input_vars <- 
         unique(extract_var(
           data_proc_elem %>% 
@@ -290,11 +287,11 @@ Please write harmo_process(dataschema = my_object) instead.')
         data_proc_elem = data_proc_elem,
         harmonized_col_dataset = harmonized_col_dataset,
         harmonized_col_id = harmonized_col_id,
-        dossier = dossier,
         .debug = .debug))
-
+    
   }
   
+  # if only a dataSchema is present
   if(is.null(object) & is.null(data_proc_elem) & !is.null(dataschema)){
     
     input_vars <- dataschema$Variables$name
@@ -310,11 +307,17 @@ Please write harmo_process(dataschema = my_object) instead.')
         data_proc_elem = data_proc_elem,
         harmonized_col_dataset = harmonized_col_dataset,
         harmonized_col_id = harmonized_col_id,
-        dossier = dossier,
         .debug = .debug))
   }
+  
+  if(is_dataset(dossier)){
     
-  if(is_dataset(dossier)) dossier <- list(dossier)
+    if(is.null(data_proc_elem)){
+      if(is.null(dataschema)) dataschema <- data_dict_extract(dossier)
+    }
+
+    dossier <- list(dossier)
+  } 
   
   if(is.null(names(dossier)))
     if(length(dossier) == 1 & !is.null(data_proc_elem))
@@ -331,7 +334,6 @@ Please write harmo_process(dataschema = my_object) instead.')
       names(dossier) <- make_name_list(as.character(fargs['dossier']), dossier)
     }    
   }
-
   
   # check arguments. make sure col_id is harmonizable if exists
   dossier <- dossier_create(dossier)
@@ -339,7 +341,7 @@ Please write harmo_process(dataschema = my_object) instead.')
   if(!is.null(data_proc_elem))
     if(length(dossier) == 1)
       if(length(unique(data_proc_elem$input_dataset)) == 1 |
-         is.na(unique(data_proc_elem$input_dataset)))
+         all(is.na(unique(data_proc_elem$input_dataset))))
         data_proc_elem$input_dataset <- names(dossier)
   
   if(!is.null(harmonized_col_id)){
@@ -348,8 +350,8 @@ Please write harmo_process(dataschema = my_object) instead.')
       lapply(function(x) 
         x %>% 
           as_dataset(harmonized_col_id)
-    )}
-
+      )}
+  
   # check arguments
   # if(is.null(dataschema) & is.null(data_proc_elem) & !is.null(harmonized_col_id)){
   #   dossier <- 
@@ -370,8 +372,8 @@ Please write harmo_process(dataschema = my_object) instead.')
         
         id_creation <- data_proc_elem_get(dossier %>% lapply(function(x) x[1]))
         data_proc_elem <- bind_rows(id_creation,data_proc_elem)
-         }
-
+      }
+  
   # check arguments
   if(is.null(data_proc_elem)){
     dossier <- add_index_dossier(dossier)
@@ -425,26 +427,25 @@ Please write harmo_process(dataschema = my_object) instead.')
     dataschema$Variables <-
       bind_rows(dataschema_col_id$Variables,dataschema$Variables)
     
-#     stop(call. = FALSE,
-# '\n\nThe harmonized_col_id `',harmonized_col_id,'`',
-# '\nmust be present in your DataSchema and in the Data Processing Elements.')
+    #     stop(call. = FALSE,
+    # '\n\nThe harmonized_col_id `',harmonized_col_id,'`',
+    # '\nmust be present in your DataSchema and in the Data Processing Elements.')
     
   }
-
+  
   
   # test if harmonized_col_id exists in dpe and dpe
   if(! harmonized_col_id %in% data_proc_elem$dataschema_variable)
-    stop(message('ERROR 100'))
-#     stop(call. = FALSE,
-# '\n\nThe harmonized_col_id `',harmonized_col_id,'`',
-# '\nmust be present in your DataSchema and in the Data Processing Elements.')
-
+      stop(call. = FALSE,
+  '\n\nThe harmonized_col_id `',harmonized_col_id,'`',
+  '\nmust be present in your DataSchema and in the Data Processing Elements.')
+  
   dpe <- dpe %>%
     group_by(.data$`input_dataset`) %>%
     group_split() %>%
     as.list
   names(dpe) <- sort(unique(bind_rows(dpe)$input_dataset))
-
+  
   vars <- extract_var(unique(data_proc_elem$dataschema_variable))
   dataschema <- 
     data_dict_filter(
@@ -458,14 +459,14 @@ Please write harmo_process(dataschema = my_object) instead.')
     # test if harmonized_col_dataset exists
     if(! harmonized_col_dataset %in% dataschema$Variable$name)
       stop(call. = FALSE,
-'\n\nIf declared, the harmonized_col_dataset `',harmonized_col_dataset,'`',
-'\nmust be present in your DataSchema and in the Data Processing Elements.')
+           '\n\nIf declared, the harmonized_col_dataset `',harmonized_col_dataset,'`',
+           '\nmust be present in your DataSchema and in the Data Processing Elements.')
     
   }
   
   if(length(intersect(names(dossier), names(dpe))) == 0){
     stop(call. = FALSE, 
-'The dataset list to be harmonized is empty.
+         'The dataset list to be harmonized is empty.
     
 This usually means that your dataset names in the Data Processing Elements 
 (in the column `dataset_input`) do not match the names in your dossier list. 
@@ -476,10 +477,15 @@ Please correct elements and reprocess.')
   # intersection of dossier and dpe
   dossier <- dossier[intersect(names(dossier), names(dpe))]
   
+  # dossier <<- dossier
+  # dpe <<- dpe
+  
+  # anchor
+  
   # selection of needed columns
   for(i in names(dossier)){
     # stop()}
-  
+    
     create_id_row <- 
       dpe[[i]][dpe[[i]]$`output_variable` %in% harmonized_col_id,]
     var_id <- extract_var(create_id_row[['input_variables']])
@@ -496,16 +502,13 @@ Please correct elements and reprocess.')
     dossier[[i]] <- try(as_dataset(dossier[[i]],col_id = var_id),silent = TRUE)
     
     if(class(dossier[[i]])[1] == 'try-error'){
-      
-      stop(message('ERROR 100'))
-# stop(call. = FALSE, 
-# 'In your Data Processing Elements, the input variable `',var_id,'` does not 
-# exists in the input dataset `',create_id_row$`input_dataset`,'`.
-# 
-# This element is mandatory for the data processing to be initiated. 
-# Please correct elements and reprocess.')
-      
-      
+      stop(call. = FALSE,
+'In your Data Processing Elements, the input variable `',var_id,'` does not
+exist in the input dataset `',create_id_row$`input_dataset`,'`.
+
+This element is mandatory for the data processing to be initiated.
+Please correct elements and reprocess.')
+  
     }
     
     dossier[[i]] <- 
@@ -513,11 +516,15 @@ Please correct elements and reprocess.')
       select(all_of(col_id(dossier[[i]])),any_of(!! names_in_dpe))
   }
   
-  # rid of data dictionary
+  # get rid of data dictionary
   dossier <- 
     as_dossier(dossier) %>% 
-    lapply(dataset_zap_data_dict)
-  
+    lapply(function(x){
+      col_idx <- col_id(x)
+      x <- dataset_zap_data_dict(x,zap_factor = TRUE)
+      x <- as_dataset(x,col_id = col_idx)
+      return(x)})
+      
   dpe <- dpe_init <- dpe[intersect(names(dossier), names(dpe))]
   
   # gather all information by dataset to be harmonized.
@@ -557,10 +564,11 @@ Please correct elements and reprocess.')
   }
   
   message(bold(
-"- Data Processing Elements: ------------------------------------------------"))
+    "- Data Processing Elements: ------------------------------------------------"))
   
   # recast <- tibble()
-  harmonization_report <- harmonization_report_init <- 
+  harmonization_report <- 
+    harmonization_report_init <- 
     tibble(
       output_variable = as.character(),
       input_dataset = as.character(),
@@ -573,9 +581,11 @@ Please correct elements and reprocess.')
   dpe <- dpe_init
   harmonization_report <- harmonization_report_init
   
+  # anchor
+  
   for (i in names(harmonized_dossier)) {
     # stop()}
-    
+     
     message(str_sub(paste0("\n",
 "--harmonization of : ",
 bold(i)," -----------------------------------------------------"),1,81))
@@ -614,8 +624,8 @@ bold(i)," -----------------------------------------------------"),1,81))
       idx <- idx + 1
       
       harmo_parse_process_rule <- 
-      
-      r_script <-
+        
+        r_script <-
         get("harmo_parse_process_rule", envir = asNamespace("Rmonize"))(
           process_rule_slice = process_rule,
           input_dataset = input_dataset,
@@ -636,7 +646,7 @@ bold(i)," -----------------------------------------------------"),1,81))
         
         if(is_error(attributes(vT_test)$condition))
           col <- attributes(vT_test)$condition}
-
+      
       error_status <- NULL
       warning_status <- NULL
       
@@ -718,7 +728,7 @@ bold(i)," -----------------------------------------------------"),1,81))
   # creation of id
   for(i in names(harmonized_dossier)){
     # stop()}
-  
+    
     id_row <- 
       dpe[[i]][dpe[[i]]$`output_variable` %in% harmonized_col_id,]
     
@@ -726,13 +736,13 @@ bold(i)," -----------------------------------------------------"),1,81))
       dossier[[i]][id_row$input_variables] %>% 
       mutate(
         across(all_of(id_row$input_variables) , ~ 
-        str_remove_all(.,pattern = '^[^\\}\\:\\:]*\\}\\:\\:')))
+                 str_remove_all(.,pattern = '^[^\\}\\:\\:]*\\}\\:\\:')))
     
     harmonized_dossier[[i]][id_row$output_variable] <-
       harmonized_dossier[[i]][id_row$output_variable] %>% 
       mutate(
         across(all_of(id_row$output_variable) , ~ 
-        str_remove_all(.,pattern = '^[^\\}\\:\\:]*\\}\\:\\:')))
+                 str_remove_all(.,pattern = '^[^\\}\\:\\:]*\\}\\:\\:')))
   }
   
   data_proc_elem <- 
@@ -742,9 +752,11 @@ bold(i)," -----------------------------------------------------"),1,81))
       "Mlstr_harmo::algorithm"     = "script"          ,
       "Mlstr_harmo::rule_category" = "rule_category"   )
   
+  # anchor
+  
   harmonized_dossier <- 
     as_harmonized_dossier(
-      harmonized_dossier,dataschema,data_proc_elem,
+      object = harmonized_dossier,dataschema,data_proc_elem,
       harmonized_col_id,harmonized_col_dataset,
       harmonized_data_dict_apply = TRUE)
   
@@ -756,12 +768,13 @@ bold(i)," -----------------------------------------------------"),1,81))
     message(
       "\n
 ------------------------------------------------------------------------------\n
-Your harmonization process contains errors. The tables with error(s) have not 
-been generated to avoid any version confusion. When harmonization elements and 
-rules are corrected, rerun the process with the updated Data Processing Elements 
-to generate complete harmonized tables.\n",
+The Data Processing Elements contain 'error' statuses. Dataset with any 'error' 
+status will appear as empty in the harmonized dossier. When the harmonization 
+statuses are finalized, remember to rerun the process with the updated 
+Data Processing Elements and generate the final harmonized datasets.\n",
+    
       
-      bold("\n\nUseful tip: "),
+bold("\n\nUseful tip: "),
 "If you identified errors and want to correct them later, you can specify
 'undetermined' in the column 'Mlstr_harmo::algorithm' of your problematic 
 Data Processing Elements(s). Such Data Processing Elements will be ignored.\n")
@@ -782,7 +795,7 @@ Data Processing Elements(s). Such Data Processing Elements will be ignored.\n")
   nb_undet <-
     nrow(dplyr::filter(harmonization_report,
                        is.na(.data$`Mlstr_harmo::status`) |
-                       str_detect(.data$`Mlstr_harmo::status`, "undetermined")))
+                         str_detect(.data$`Mlstr_harmo::status`, "undetermined")))
   
   if(nb_undet > 0){
     message(
@@ -795,11 +808,11 @@ process with the updated Data Processing Elements to generate complete
 harmonized tables.")}
   
   
-  if(nb_error > 0){
+  if(nb_error == 0 & nb_undet == 0){
     message(
       "\n
 ------------------------------------------------------------------------------\n
-Your harmonization is done. Please check if everything worked correctly.\n")    
+Harmonization process is done. Please check if everything worked correctly.\n")    
     
   }
   
@@ -818,13 +831,13 @@ Your harmonization is done. Please check if everything worked correctly.\n")
 #' Generates code for harmonized dataset.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -834,7 +847,7 @@ Your harmonization is done. Please check if everything worked correctly.\n")
 #' @param r_script R Script extracted form Data Processing Elements.
 #'
 #' @returns
-#' A data frame identifying a harmonized dataset
+#' A data frame identifying a harmonized dataset.
 #'
 #' @import dplyr
 #' @importFrom rlang .data
@@ -843,7 +856,7 @@ harmo_parse_process_rule <- function(
     process_rule_slice, 
     input_dataset,
     r_script){
-
+  
   if(is.na(process_rule_slice$`rule_category`))
     process_rule_slice$`rule_category` <- 'undetermined'
   
@@ -855,18 +868,18 @@ harmo_parse_process_rule <- function(
         paste0("try(Rmonize:::harmo_process_",
                process_rule_slice$`rule_category`,
                "(process_rule_slice %>% slice(",row_number(),
-               ")), silent = TRUE)" ))
-
+               ")), silent = TRUE)" )) 
+  
   process_script <-
     paste0("`input_dataset` %>% \n",
            eval(parse(text = process_rule_slice$to_eval_test)), " %>%\n",
            "  select(",toString(paste0("'",col_id(input_dataset),"'")),",'",
-                       process_rule_slice$output_variable,"')")
-
+           process_rule_slice$output_variable,"')")
+  
   if(r_script) return(process_script)
-
+  
   process_script <- 
-
+    
     tryCatch(
       
       {
@@ -898,13 +911,13 @@ harmo_parse_process_rule <- function(
 #' Processes 'add_variable' in the process of harmonization.
 #' 
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -913,13 +926,13 @@ harmo_parse_process_rule <- function(
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #' @noRd
 harmo_process_add_variable <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
@@ -929,9 +942,9 @@ harmo_process_add_variable <- function(process_rule_slice){
         "  ",.data$`input_dataset`," %>% \n",
         "  mutate(\n",
         "  '",.data$`output_variable`,"' = ",.data$`replacement`,") %>% \n")
-      ) %>%
+    ) %>%
     pull(.data$`to_eval_test`)
-
+  
   return(process_script_to_eval)
 }
 
@@ -942,13 +955,13 @@ harmo_process_add_variable <- function(process_rule_slice){
 #' Processes 'case_when' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -957,17 +970,17 @@ harmo_process_add_variable <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_case_when <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
-    # Rmonize_DEMO$`data_processing_elements - final` %>%
+    # Rmonize_examples$`Data Processing Elements` %>%
     # dplyr::filter(`Mlstr_harmo::rule_category` == 'case_when') %>%
     # slice(1) %>%
     # select(
@@ -991,7 +1004,7 @@ harmo_process_case_when <- function(process_rule_slice){
           "  mutate(\n",
           "  '",.data$`output_variable`,"' = ",.data$`replacement`,")")) %>%
     pull(.data$`to_eval_test`)
-
+  
   return(process_script_to_eval)
 }
 
@@ -1002,13 +1015,13 @@ harmo_process_case_when <- function(process_rule_slice){
 #' Processes 'direct_mapping' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1017,7 +1030,7 @@ harmo_process_case_when <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
@@ -1035,7 +1048,7 @@ harmo_process_direct_mapping <- function(process_rule_slice){
           "  mutate(\n",
           "  '",.data$`output_variable`,"' = `",.data$`replacement`,"`)")) %>%
     pull(.data$`to_eval_test`)
-
+  
   return(process_script_to_eval)
 }
 
@@ -1044,15 +1057,15 @@ harmo_process_direct_mapping <- function(process_rule_slice){
 #'
 #' @description
 #' Creates id in the process of harmonization.
-#'
+#' 
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1061,24 +1074,69 @@ harmo_process_direct_mapping <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #' 
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_id_creation <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
-      replacement      = .data$`input_variables`,
+      replacement      =
+        .data$`script` %>% str_squish(),
       to_eval_test     =
         paste0(
           "  mutate(\n",
           "  '",.data$`output_variable`,"' = ",.data$`replacement`,")")) %>%
     pull(.data$`to_eval_test`)
+  
+  return(process_script_to_eval)
+}
 
+#' @title
+#' Internal function for 'dataset_id_creation' in the process of harmonization
+#'
+#' @description
+#' Creates dataset id in the process of harmonization.
+#'
+#' @details
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
+#' primary identifier variable (e.g., participant unique ID).
+#'
+#' @param process_rule_slice A one-rowed data frame, identifying the occurring
+#' Data Processing Elements. 
+#'
+#' @returns
+#' A character string of R code for harmonizing a specific column in
+#' an input dataset. That line code is the transcription of the
+#' harmonization rule in the Data Processing Elements.
+#' 
+#' @import dplyr stringr
+#' @importFrom rlang .data
+#'
+#' @noRd
+harmo_process_dataset_id_creation <- function(process_rule_slice){
+  
+  process_script_to_eval <-
+    process_rule_slice %>%
+    mutate(
+      replacement      =
+        .data$`script` %>% str_squish(),
+      to_eval_test     =
+        paste0(
+          "  mutate(\n",
+          "  '",.data$`output_variable`,"' = ",.data$`replacement`,")")) %>%
+    pull(.data$`to_eval_test`)
+  
   return(process_script_to_eval)
 }
 
@@ -1089,13 +1147,13 @@ harmo_process_id_creation <- function(process_rule_slice){
 #' Processes 'impossible' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1104,14 +1162,14 @@ harmo_process_id_creation <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_impossible <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
@@ -1121,7 +1179,7 @@ harmo_process_impossible <- function(process_rule_slice){
           "  mutate(\n",
           "  '",.data$`output_variable`,"' = ",.data$`replacement`,")")) %>%
     pull(.data$`to_eval_test`)
-
+  
   return(process_script_to_eval)
 }
 
@@ -1132,13 +1190,13 @@ harmo_process_impossible <- function(process_rule_slice){
 #' Processes 'merge' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1147,14 +1205,14 @@ harmo_process_impossible <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_merge_variable <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
@@ -1176,7 +1234,7 @@ harmo_process_merge_variable <- function(process_rule_slice){
           "  ",.data$`input_dataset`," %>% \n",
           "  mutate(\n",
           "  '",.data$`output_variable`,"' = ",.data$`replacement`,") %>% \n"
-          )) %>%
+        )) %>%
     pull(.data$`to_eval_test`)
   
   return(process_script_to_eval$to_eval_test)
@@ -1189,13 +1247,13 @@ harmo_process_merge_variable <- function(process_rule_slice){
 #' Processes 'operation' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1204,22 +1262,19 @@ harmo_process_merge_variable <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_operation <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
       replacement      =
         .data$`script` %>% str_squish(),
-      replacement      =
-        .data$`replacement` %>%
-        str_replace_all("\\$",paste0(.data$`input_dataset`,"$")),
       to_eval_test     =
         paste0(
           "  mutate(\n",
@@ -1236,13 +1291,13 @@ harmo_process_operation <- function(process_rule_slice){
 #' Processes 'other' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1251,7 +1306,7 @@ harmo_process_operation <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
@@ -1262,7 +1317,8 @@ harmo_process_other <- function(process_rule_slice){
   process_script_to_eval <-
     process_rule_slice %>%
     mutate(
-      replacement      = .data$`script` %>% str_squish(),
+      replacement      = 
+        .data$`script` %>% str_squish(),
       to_eval_test =
         paste0(
           "  mutate(\n",
@@ -1277,25 +1333,24 @@ harmo_process_other <- function(process_rule_slice){
 #'
 #' @description
 #' Processes 'paste' in the process of harmonization.
-#'
+#' 
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
-#' Data Processing Elements. 
-
+#' Data Processing Elements.
 #'
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
@@ -1325,13 +1380,13 @@ harmo_process_paste <- function(process_rule_slice){
 #' Processes 'recode' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1340,14 +1395,14 @@ harmo_process_paste <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
-#' @import dplyr stringr 
+#' @import dplyr stringr
 #' @importFrom rlang .data
 #'
 #' @noRd
 harmo_process_recode <- function(process_rule_slice){
-
+  
   process_script_to_eval <-
     process_rule_slice %>%
     # process_rule %>%
@@ -1399,23 +1454,22 @@ harmo_process_recode <- function(process_rule_slice){
 #' Processes 'rename' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
-#' Data Processing Elements. 
-
+#' Data Processing Elements.
 #'
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #' 
 #' @import dplyr stringr
 #' @importFrom rlang .data
@@ -1444,13 +1498,13 @@ harmo_process_rename <- function(process_rule_slice){
 #' Processes 'undetermined' in the process of harmonization.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param process_rule_slice A one-rowed data frame, identifying the occurring
@@ -1459,7 +1513,7 @@ harmo_process_rename <- function(process_rule_slice){
 #' @returns
 #' A character string of R code for harmonizing a specific column in
 #' an input dataset. That line code is the transcription of the
-#' harmonisation rule in the Data Processing Elements.
+#' harmonization rule in the Data Processing Elements.
 #'
 #' @import dplyr stringr
 #' @importFrom rlang .data
@@ -1502,15 +1556,19 @@ harmo_process_undetermined <- function(process_rule_slice){
 #' TRUE by default.
 #'
 #' @returns
-#' Nothing to be returned. The function prints messages in the console, 
-#' showing any errors in the processing.
+#' Nothing to be returned. The function prints messages in the console,
+#' showing any errors in data processing.
 #'
 #' @examples
 #' {
-#'
-#'   harmonized_dossier <- Rmonize_DEMO$harmonized_dossier
-#'   show_harmo_error(harmonized_dossier)
+#' # Use Rmonize_examples to run examples.
+#' library(dplyr)
 #' 
+#' # Perform data processing
+#' harmonized_dossier <- Rmonize_examples$`harmonized_dossier`
+#' 
+#' # Show error(s) on the console
+#' show_harmo_error(harmonized_dossier)
 #' }
 #'
 #' @import dplyr tidyr stringr
@@ -1659,14 +1717,26 @@ of harmonization:\n"))
 #' Generates a DataSchema from a Data Processing Elements.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
+#' 
+#' A DataSchema is the list of core variables to generate across datasets and
+#' related metadata. A DataSchema object is a list of data frames with elements
+#' named 'Variables' (required) and 'Categories' (if any). The 'Variables'
+#' element must contain at least the `name` column, and the 'Categories'
+#' element must contain at least the `variable` and `name` columns to be usable
+#' in any function. In 'Variables' the `name` column must also have unique
+#' entries, and in 'Categories' the combination of `variable` and `name` columns
+#' must also be unique.
+#' The object may be specifically formatted to be compatible with additional
+#' [Maelstrom Research software](https://maelstrom-research.org/page/software),
+#' in particular [Opal environments](https://www.obiba.org/pages/products/opal/).
 #'
 #' @param data_proc_elem A Data Processing Elements object.
 #' 
@@ -1677,11 +1747,12 @@ of harmonization:\n"))
 #' @examples
 #' {
 #'
-#' # Use Rmonize_DEMO to run examples.
+#' # Use Rmonize_examples to run examples.
 #' library(dplyr)
 #'
-#' glimpse(dataschema_extract(
-#'   data_proc_elem = Rmonize_DEMO$`data_processing_elements - final`))
+#' dataschema <- dataschema_extract(Rmonize_examples$`Data_Processing_Elements_no_errors`)
+#' glimpse(dataschema)
+#' 
 #' }
 #'
 #' @import dplyr
@@ -1721,13 +1792,13 @@ dataschema_extract <- function(data_proc_elem){
 #' separately to ensure that an object has an appropriate structure.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param object A potential Data Processing Elements object to be coerced.
@@ -1738,10 +1809,12 @@ dataschema_extract <- function(data_proc_elem){
 #' @examples
 #' {
 #'
-#' # Use Rmonize_DEMO to run examples.
+#' # Use Rmonize_examples to run examples.
 #' library(dplyr)
 #'
-#' glimpse(head(as_data_proc_elem(Rmonize_DEMO$`data_processing_elements - final`),3))
+#' data_proc_elem <- as_data_proc_elem(Rmonize_examples$`Data_Processing_Elements_no_errors`)
+#' 
+#' head(data_proc_elem)
 #' 
 #' }
 #'
@@ -1850,14 +1923,14 @@ dataset(s). Your first processing element must be "id_creation" in
 dataset in your dossier.')
     })
     
-  nb_col_id <- 
-    unique(
-      object[
-        object$`Mlstr_harmo::rule_category` %in% 'id_creation',][[
-          'dataschema_variable']])
+    nb_col_id <- 
+      unique(
+        object[
+          object$`Mlstr_harmo::rule_category` %in% 'id_creation',][[
+            'dataschema_variable']])
   
-  if(length(nb_col_id) > 1)
-    stop(call. = FALSE,
+    if(length(nb_col_id) > 1)
+      stop(call. = FALSE,
 'In ',unique(object$input_dataset),': \n\n',
 'In the column `Mlstr_harmo::rule_category` of your Data Processing Elements, 
 "id_creation" is not unique across the harmonized dataset(s) to generate. 
@@ -1867,101 +1940,112 @@ generated harmonized dataset(s). Your first processing element must be
 "id_creation" in `Mlstr_harmo::rule_category` followed by the name of the column taken 
 identifier of dataset in your dossier.')
   
-  # harmo status must be either NA, complete, impossible or undetermined
-
-  # step cleaning : addition of missing columns
-  object <-
-    object %>%
-    bind_rows(tibble(
-      `valueType` = as.character(),
-      `Mlstr_harmo::status` = as.character(),
-      `Mlstr_harmo::status_detail` = as.character(),
-      `Mlstr_harmo::comment` = as.character()))
-
-  
-  # step cleaning : addition of `Mlstr_harmo::rule_category`.
-  object <-
-    object %>%
-    mutate(
-      `Mlstr_harmo::rule_category` = case_when(
-        if_any(c("input_variables",
-                 "Mlstr_harmo::rule_category",
-                 "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
-          'undetermined',
-        is.na(`Mlstr_harmo::rule_category`)                        ~ 
-          'undetermined',
-        TRUE                                                       ~ 
-          `Mlstr_harmo::rule_category`))
-  
-  # step cleaning : addition of Mlstr_harmo::status.
-  object <-
-    object %>%  
-    mutate(
-      `Mlstr_harmo::status` = case_when(
-        if_any(c("input_variables",
-                 "Mlstr_harmo::rule_category",
-                 "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
-          'undetermined',
-        if_any(c("Mlstr_harmo::rule_category",
-                 "Mlstr_harmo::algorithm"), ~ . == "impossible")   ~ 
-          'impossible',
-        is.na(`Mlstr_harmo::status`)                               ~ 
-          'complete',
-        TRUE                                                       ~ 
-          .data$`Mlstr_harmo::status`))
+    # harmo status must be either NA, complete, impossible or undetermined
     
-  # step cleaning : addition of Mlstr_harmo::status_detail.
-  object <-
-    object %>%  
-    mutate(
-      `Mlstr_harmo::status_detail` = case_when(
-        if_any(c("input_variables",
-                 "Mlstr_harmo::rule_category",
-                 "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
-          'undetermined',
-        is.na(`Mlstr_harmo::status_detail`)                        ~ 
-          'unknown',
-        TRUE                                                       ~ 
-          .data$`Mlstr_harmo::status_detail`))
-  
-  # step cleaning : id_creation must be the first entry
-  object <-
-    object %>%
-    group_by(.data$`input_dataset`) %>%
-    group_modify(.f = ~ 
-                bind_rows(
-                  dplyr::filter(., `Mlstr_harmo::rule_category` %in% 'id_creation'),
-                  dplyr::filter(.,!`Mlstr_harmo::rule_category` %in% 'id_creation')))
-    
-  if(is.null(object[['index']])){
+    # step cleaning : addition of missing columns
     object <-
       object %>%
-      add_index()}
+      bind_rows(tibble(
+        `valueType` = as.character(),
+        `Mlstr_harmo::status` = as.character(),
+        `Mlstr_harmo::status_detail` = as.character(),
+        `Mlstr_harmo::comment` = as.character()))
 
-  # step cleaning : addition of index
-  if(is.null(object[['index']])){
+  
+    # step cleaning : addition of `Mlstr_harmo::rule_category`.
     object <-
       object %>%
-      add_index()}
-  
-  # if all test pass:
-  object <- 
-    object %>%
-    ungroup %>%
-    select('index',
-           'dataschema_variable',
-           'valueType',
-           'input_dataset',
-           'input_variables',
-           'Mlstr_harmo::rule_category',
-           'Mlstr_harmo::algorithm',
-           'Mlstr_harmo::status',
-           'Mlstr_harmo::status_detail',
-           'Mlstr_harmo::comment',
-           everything())
+      mutate(
+        `Mlstr_harmo::rule_category` = case_when(
+          if_any(c("input_variables",
+                   "Mlstr_harmo::rule_category",
+                   "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
+            'undetermined',
+          is.na(`Mlstr_harmo::rule_category`)                        ~ 
+            'undetermined',
+          TRUE                                                       ~ 
+            `Mlstr_harmo::rule_category`))
     
-    attributes(object)$`Rmonize::class` <- "data_proc_elem"
-    return(object)
+    # step cleaning : addition of Mlstr_harmo::status.
+    object <-
+      object %>%  
+      mutate(
+        `Mlstr_harmo::status` = case_when(
+          if_any(c("input_variables",
+                   "Mlstr_harmo::rule_category",
+                   "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
+            'undetermined',
+          if_any(c("Mlstr_harmo::rule_category",
+                   "Mlstr_harmo::algorithm"), ~ . == "impossible")   ~ 
+            'impossible',
+          is.na(`Mlstr_harmo::status`)                               ~ 
+            'complete',
+          TRUE                                                       ~ 
+            .data$`Mlstr_harmo::status`))
+    
+    # step cleaning : addition of Mlstr_harmo::status_detail.
+    object <-
+      object %>%  
+      mutate(
+        `Mlstr_harmo::status_detail` = case_when(
+          if_any(c("input_variables",
+                   "Mlstr_harmo::rule_category",
+                   "Mlstr_harmo::algorithm"), ~ . == "undetermined") ~ 
+            'undetermined',
+          is.na(`Mlstr_harmo::status_detail`)                        ~ 
+            'unknown',
+          TRUE                                                       ~ 
+            .data$`Mlstr_harmo::status_detail`))
+    
+    # step cleaning : id_creation must be the first entry
+    object <-
+      object %>%
+      group_by(.data$`input_dataset`) %>%
+      group_modify(.f = ~ 
+                     bind_rows(
+                       dplyr::filter(., `Mlstr_harmo::rule_category` %in% 'id_creation'),
+                       dplyr::filter(.,!`Mlstr_harmo::rule_category` %in% 'id_creation')))
+    
+    if(is.null(object[['index']])){
+      object <-
+        object %>%
+        add_index()}
+    
+    # step cleaning : addition of index
+    if(is.null(object[['index']])){
+      object <-
+        object %>%
+        add_index()}
+    
+    # if all test pass:
+    object <- 
+      object %>%
+      ungroup %>%
+      select('index',
+             'dataschema_variable',
+             'valueType',
+             'input_dataset',
+             'input_variables',
+             'Mlstr_harmo::rule_category',
+             'Mlstr_harmo::algorithm',
+             'Mlstr_harmo::status',
+             'Mlstr_harmo::status_detail',
+             'Mlstr_harmo::comment',
+             everything())
+  
+    # test if car lib is present, when recode are in the data processing elements 
+    if("recode" %in% object$`Mlstr_harmo::rule_category`){
+      
+      test_car_lib <- 
+        try(parceval("car::recode(iris$Species,c(\"'setosa' = 'A'\"))"),silent = TRUE)
+      if(class(test_car_lib)[1] == "try-error")
+        stop(call. = FALSE,'
+`car` library must be installed in your environment to perform data processing.\n\n',
+             test_car_lib)}
+  
+
+  attributes(object)$`Rmonize::class` <- "data_proc_elem"
+  return(object)
 
   }
 
@@ -2040,10 +2124,11 @@ Please refer to documentation.")
 #' @examples
 #' {
 #'
-#' # Use Rmonize_DEMO to run examples.
+#' # Use Rmonize_examples to run examples.
 #' library(dplyr)
 #'
-#' glimpse(as_dataschema(Rmonize_DEMO$`dataschema - final`))
+#' dataschema <- as_dataschema(Rmonize_examples$`DataSchema`)
+#' glimpse(dataschema)
 #' 
 #' }
 #'
@@ -2115,10 +2200,11 @@ bold("Useful tip:\n"),
 #' @examples
 #' {
 #'
-#' # Use Rmonize_DEMO to run examples.
+#' # Use Rmonize_examples to run examples.
 #' library(dplyr)
 #'
-#' glimpse(as_dataschema_mlstr(Rmonize_DEMO$`dataschema - final`))
+#' dataschema_mlstr <- as_dataschema_mlstr(Rmonize_examples$`DataSchema`)
+#' glimpse(dataschema_mlstr)
 #' 
 #' }
 #'
@@ -2154,54 +2240,58 @@ as_dataschema_mlstr <- function(object){
 #' that there is always a unique entity identifier when datasets are pooled.
 #'
 #' @details
-#' A harmonized dossier is a named list containing one or more data frames, 
-#' which are harmonized datasets. A harmonized dossier is generally the 
-#' product of applying processing to a dossier object The name of each 
-#' harmonized dataset (data frame) is taken from the reference input dataset. 
-#' A harmonized dossier also contains the DataSchema and 
+#' A harmonized dossier is a named list containing one or more data frames,
+#' which are harmonized datasets. A harmonized dossier is generally the
+#' product of applying processing to a dossier object The name of each
+#' harmonized dataset (data frame) is taken from the reference input dataset.
+#' A harmonized dossier also contains the DataSchema and
 #' Data Processing Elements used in processing as attributes.
 #' 
-#' A DataSchema is the list of core variables to generate across datasets and 
-#' related metadata. A DataSchema object is a list of data frames with elements 
-#' named 'Variables' (required) and 'Categories' (if any). The 'Variables' 
-#' element must contain at least the `name` column, and the 'Categories' 
-#' element must contain at least the `variable` and `name` columns to be usable 
-#' in any function. In 'Variables' the `name` column must also have unique 
-#' entries, and in 'Categories' the combination of `variable` and `name` columns 
-#' must also be unique. 
-#'  
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' A DataSchema is the list of core variables to generate across datasets and
+#' related metadata. A DataSchema object is a list of data frames with elements
+#' named 'Variables' (required) and 'Categories' (if any). The 'Variables'
+#' element must contain at least the `name` column, and the 'Categories'
+#' element must contain at least the `variable` and `name` columns to be usable
+#' in any function. In 'Variables' the `name` column must also have unique
+#' entries, and in 'Categories' the combination of `variable` and `name` columns
+#' must also be unique.
+#' 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param object A A potential harmonized dossier object to be coerced.
 #' @param dataschema A DataSchema object.
 #' @param data_proc_elem A Data Processing Elements object.
-#' @param harmonized_col_id A character string identifying the name of the 
-#' column present in every dataset to use as a dataset identifier.
+#' @param harmonized_col_id  A character string identifying the name of the 
+#' column present in every dataset to use as a participant identifier.
 #' @param harmonized_col_dataset A character string identifying the column 
 #' to use for dataset names.
 #' @param harmonized_data_dict_apply Whether to apply the dataschema to each 
 #' harmonized dataset. FALSE by default.
 #'
 #' @returns
-#' A list of data frame(s), containing harmonized dataset(s). 
-#' The DataSchema and Data Processing Elements are preserved as attributes of 
-#' the output harmonized dossier.
+#' A list of data frame(s) containing harmonized dataset(s).
+#' The DataSchema and Data Processing Elements are preserved as attributes of
+#' the harmonized dossier.
 #'
 #' @examples
 #' {
 #' 
-#' # Use Rmonize_DEMO to run examples.
+#' # Use Rmonize_examples to run examples.
+#'  
 #' library(dplyr)
+#'
+#' harmonized_dossier <- Rmonize_examples[["harmonized_dossier"]]
+#' harmonized_dossier <- as_harmonized_dossier(harmonized_dossier)
 #' 
-#' glimpse(as_harmonized_dossier(Rmonize_DEMO$harmonized_dossier))
-#'   
+#' glimpse(harmonized_dossier$dataset_study1)
+#' 
 #' }
 #'
 #' @import dplyr fabR
@@ -2216,32 +2306,40 @@ as_harmonized_dossier <- function(
     harmonized_col_dataset = attributes(object)$`Rmonize::harmonized_col_dataset`,
     harmonized_data_dict_apply = FALSE){
 
-  silently_run(dossier_create(object))
+  # check if the object is enough a dossier
+  dossier_create(object)
+  
+  if(is_dataset(object)) object <- dossier_create(object)
   
   if(!is.logical(harmonized_data_dict_apply))
     stop(call. = FALSE,
-         '`harmonized_data_dict_apply` must be TRUE or FALSE (TRUE by default)')
+    '`harmonized_data_dict_apply` must be TRUE or FALSE (TRUE by default)')
 
   # check the id column 
   if(is.null(harmonized_col_id))
-    stop(message('ERROR 100'))
-  #   stop(call. = FALSE,
-  #        '`harmonized_col_id` must be provided')
+    stop(call. = FALSE,                                                         # [GF] QUESTION : text to validate
+    '`harmonized_col_id` cannot be NULL and must be provided')
   
   # check if col_id exists
-  bind_rows(
-    object %>% lapply(function(x) x %>% 
-                        mutate(across(everything(),as.character)))) %>% 
-    select(all_of(harmonized_col_id))
+  dossier_create(object) %>% lapply(
+    function(x){
+      test <- silently_run(as_dataset(x, col_id = harmonized_col_id))
+      if(class(test)[[1]] == "try-error")
+        stop(call. = FALSE,
+        paste0("`",harmonized_col_id,
+               "` identifier column must be present in each harmonized dataset."))
+      return(x)
+    })
   
   # check the DataSchema
   if(is.null(dataschema)){
-    dataschema <- data_dict_extract(bind_rows(as.list(object)))
+    
+    dataschema <- data_dict_extract(dossier_create(object)[[1]])
     dataschema$Variables <- 
       dataschema$Variables %>%
       select(-starts_with("Mlstr_harmo::"),-starts_with("Rmonize::"))}
 
-  dataschema <- as_dataschema(dataschema,as_dataschema_mlstr = TRUE)
+  dataschema <- as_dataschema_mlstr(dataschema)
   
   # check the DPE
   if(is.null(data_proc_elem)){
@@ -2273,8 +2371,7 @@ as_harmonized_dossier <- function(
   }
   
   data_proc_elem <- as_data_proc_elem(data_proc_elem)
-  dataschema <- as_data_dict_mlstr(dataschema)
-  
+
   # Warn user that the dataschema should have a categorical variable if
   # harmonized_col_dataset is provided.
   
@@ -2314,8 +2411,6 @@ name list of variables.")
     message(bold("\n
 - CREATION OF HARMONIZED DATA DICTIONARY : --------------------------------\n"))
     
-
-    
     for(i in names(object)){
       # stop()}
       
@@ -2331,23 +2426,30 @@ name list of variables.")
         data_proc_elem %>%
         rename("name" = "dataschema_variable") %>%
         dplyr::filter(.data$`input_dataset` == !! i) %>%
-        select('name', 
-               'Mlstr_harmo::rule_category',
-               'Mlstr_harmo::algorithm',
-               matches('^Rmonize::r_script$'),
-               'Mlstr_harmo::status',
-               'Mlstr_harmo::status_detail',
-               'Mlstr_harmo::comment')
+        select(intersect(
+          c('name',names(data_proc_elem)),
+          c('name',
+            'Rmonize::r_script',
+            'Mlstr_harmo::rule_category',
+            'Mlstr_harmo::algorithm',
+            'Mlstr_harmo::status',
+            'Mlstr_harmo::status_detail',
+            'Mlstr_harmo::comment')))
       
       harmo_data_dict[['Variables']] <-
         harmo_data_dict[['Variables']] %>%
         full_join(input_data_proc_elem, by = 'name')
       
+      attributes(harmo_data_dict)[['Rmonize::class']] <- NULL
+      
+      ## issue 68
+      col_idx <- col_id(object[[i]])
       object[[i]] <- 
         valueType_adjust(
           from = harmo_data_dict,
           to = as_dataset(object[[i]])) %>%
         dataset_zap_data_dict() %>%
+        as_dataset(col_id = col_idx) %>%
         data_dict_apply(harmo_data_dict)
       
       message(bold(i)," : done")
@@ -2372,11 +2474,12 @@ name list of variables.")
 #' @description
 #' Generates a pooled harmonized dataset from a harmonized dossier. The function 
 #' has two arguments that can optionally be declared by the user 
-#' (`unique_col_dataset` and `unique_col_id`). `unique_col_dataset` refers to 
-#' the columns which contains name of each harmonized dataset. `unique_col_id` 
-#' refers to the column in harmonized datasets which identifies unique 
-#' combinations of observation/dataset. These two columns are added to ensure 
-#' that there is always a unique entity identifier when datasets are pooled.
+#' (`harmonized_col_dataset` and `harmonized_col_id`). `harmonized_col_dataset` 
+#' refers to the columns which contains name of each harmonized dataset. 
+#' `harmonized_col_id` refers to the column in harmonized datasets which 
+#' identifies unique combinations of observation/dataset. These two columns are 
+#' added to ensure that there is always a unique entity identifier when datasets 
+#' are pooled.
 #' 
 #' @details
 #' A harmonized dossier is a named list containing one or more data frames, 
@@ -2395,24 +2498,20 @@ name list of variables.")
 #' entries, and in 'Categories' the combination of `variable` and `name` columns 
 #' must also be unique. 
 #' 
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param harmonized_dossier A list containing the harmonized dataset(s).
 #' @param harmonized_col_id A character string identifying the name of the 
-#' column present in every dataset to use as a dataset identifier.
+#' column present in every dataset to use as a participant identifier.
 #' @param harmonized_col_dataset A character string identifying the column 
 #' to use for dataset names.
-#' @param add_col_dataset Whether to add an extra column to each 
-#' harmonized dataset. The resulting data frame will have an additional column 
-#' and its data dictionary will be updated accordingly adding categories for 
-#' this variable if necessary. FALSE by default.
 #' @param dataschema A DataSchema object.
 #' @param data_proc_elem A Data Processing Elements object.
 #'
@@ -2422,13 +2521,17 @@ name list of variables.")
 #' @examples
 #' {
 #'
-#' # use madshapR_DEMO provided by the package
+#' # Use Rmonize_examples to run examples.
+#'  
 #' library(dplyr)
 #' 
-#' harmonized_dossier <- Rmonize_DEMO$harmonized_dossier
-#'
-#' glimpse(pooled_harmonized_dataset_create(
-#'   harmonized_dossier,harmonized_col_id = 'adm_unique_id'))
+#' # Perform data processing
+#' harmonized_dossier <- Rmonize_examples["harmonized_dossier"][[1]]
+#' 
+#' # create the pooled harmonized dataset from the harmonized dossier
+#' pooled_harmonized_dataset <- pooled_harmonized_dataset_create(harmonized_dossier)
+#'   
+#' glimpse(pooled_harmonized_dataset)
 #'   
 #' }
 #'
@@ -2440,110 +2543,123 @@ pooled_harmonized_dataset_create <- function(
     harmonized_dossier,
     harmonized_col_dataset = attributes(harmonized_dossier)$`Rmonize::harmonized_col_dataset`,
     harmonized_col_id = attributes(harmonized_dossier)$`Rmonize::harmonized_col_id`,
-    add_col_dataset = FALSE,
     dataschema = attributes(harmonized_dossier)$`Rmonize::DataSchema`,
     data_proc_elem = attributes(harmonized_dossier)$`Rmonize::Data Processing Elements`){
-  
-  if(!is.logical(add_col_dataset))
-    stop(call. = FALSE,
-         '`add_col_dataset` must be TRUE or FALSE (TRUE by default)')
-  
+
   # check harmonized dossier (except harmonized_col_dataset)
   as_harmonized_dossier(
     object = harmonized_dossier,
     harmonized_col_id = harmonized_col_id,
     dataschema = dataschema,
     data_proc_elem = data_proc_elem)
-
+  
+  # at this step, the dataset is n + 1
   pooled_harmonized_dataset <- 
-    bind_rows(harmonized_dossier) %>%
-    data_dict_apply(dataschema)
-
-  col_dataset <- 
-    tibble(.rows = nrow(pooled_harmonized_dataset))
+    bind_rows(
+      harmonized_dossier,
+      .id = 'Rmonize::harmonized_col_dataset') %>%
+    as_dataset(col_id = harmonized_col_id)
   
-  if(is.null(harmonized_col_dataset)){
-    if(add_col_dataset == TRUE){
-      # if the harmonized_col_dataset is null 
-      harmonized_col_dataset <- 'Rmonize::harmonized_col_dataset'
-    }
-  }
-  
+  # if the harmonized_col_dataset is !null 
   # test whether the harmonized_col_dataset exists and is categorical (
   # NA dont exists but to add
   # TRUE exists and categorical
   # FALSE exists not categorical
   # NULL is not provided)
+
+  harmo_col <- 
+    case_when(
+      is.null(harmonized_col_dataset)          ~ "to_name_default",
+      toString(harmonized_col_dataset) %in% names(pooled_harmonized_dataset) ~ 
+        ifelse(
+          toString(
+          pooled_harmonized_dataset %>% reframe(
+            across(any_of(harmonized_col_dataset),  is_category))) == "FALSE",
+                                                  "to_catify",
+                                                  "to_remove"),
+      ! toString(harmonized_col_dataset) %in% 
+        names(pooled_harmonized_dataset)        ~ "to_name")
+
+  if(harmo_col == "to_remove"){
+
+    pooled_harmonized_dataset <- 
+      pooled_harmonized_dataset %>%
+      select(-'Rmonize::harmonized_col_dataset')
+        
+  }
   
-  bool_test <- 
-    if(!is.null(harmonized_col_dataset)){
-      toString(
-        pooled_harmonized_dataset %>% reframe(
-          across(any_of(harmonized_col_dataset),  is_category))) %>%
-        as.logical %>% 
-        as_any_boolean == FALSE}else{NULL}
-  
-  if(!is.null(bool_test)){
+  if(harmo_col == "to_catify"){
+
+    pooled_harmonized_dataset <-
+      pooled_harmonized_dataset %>%
+      mutate(across(any_of(harmonized_col_dataset), as_category)) %>%
+      select(-'Rmonize::harmonized_col_dataset')
     
-    if(bool_test %in% FALSE){} # nothing to warn. the col exists and is categorical
+    dataschema <- if(is.null(dataschema)) 
+      data_dict_extract(pooled_harmonized_dataset) else
+        data_dict_update(
+          dataschema,pooled_harmonized_dataset, harmonized_col_dataset)
     
-    if(bool_test %in% TRUE){
       warning(call. = FALSE,
 '\nThe harmonized_col_dataset `',harmonized_col_dataset,'` you declared is not ',
 'categorical in your DataSchema.',
-'\nThe correspondant categories have been be created in your pooled harmonized dataset.',
+'\nThe corresponding categories have been be created in your pooled harmonized dataset.',
 bold("\n\nUseful tip:\n"),
-'To avoid this warning, we recommend to add the categories in your DataSchema.')
-
-  }
+'To avoid this warning, we recommend to add the categories in your DataSchema.')}
   
-    if(is.na(bool_test) & add_col_dataset == TRUE) {
-      warning(call. = FALSE,
+  
+  if(harmo_col == "to_name_default") {
+      
+    harmonized_col_dataset <- "Rmonize::harmonized_col_dataset"
+    pooled_harmonized_dataset <-
+      pooled_harmonized_dataset %>%
+      mutate(across(any_of(harmonized_col_dataset), as_category))
+    
+    dataschema <- if(is.null(dataschema)) 
+      data_dict_extract(pooled_harmonized_dataset) else
+        data_dict_update(
+          dataschema,pooled_harmonized_dataset, harmonized_col_dataset)
+    
+    warning(call. = FALSE,
 '\nAn additional variable `',harmonized_col_dataset,'` has been created
-with harmonized dataset names as values for each harmonized dataset.',
+with dataset names as values for each harmonized dataset.',
 bold("\n\nUseful tip:\n"),
-'To avoid this message, we recommend to set `harmonized_col_dataset` as a 
-categorical variable DataSchema, or to set `add_col_dataset` = FALSE.')
+'To avoid this warning, we recommend setting `harmonized_col_dataset` as a 
+categorical variable in the DataSchema.')}
     
-      col_dataset <- harmonized_dossier
-    
-      for(i in names(col_dataset)){
-        # stop()}
-        col_dataset[[i]] <- 
-          col_dataset[[i]] %>% 
-          mutate(`Rmonize::harmonized_col_dataset` = i) %>%
-          select(!!harmonized_col_dataset := 'Rmonize::harmonized_col_dataset')}
+  if(harmo_col == "to_name") {
       
-      col_dataset <- bind_rows(col_dataset)
-      
-    }
+    pooled_harmonized_dataset <-
+      pooled_harmonized_dataset %>%
+      rename(!!harmonized_col_dataset := "Rmonize::harmonized_col_dataset") %>%
+      mutate(across(any_of(harmonized_col_dataset), as_category))
     
-    if(is.na(bool_test) & add_col_dataset == FALSE) {
-      stop(call. = FALSE,
+    dataschema <- if(is.null(dataschema)) 
+      data_dict_extract(pooled_harmonized_dataset) else
+        data_dict_update(
+          dataschema,pooled_harmonized_dataset, harmonized_col_dataset)
+    
+    warning(call. = FALSE,
 '\nThe harmonized_col_dataset `',harmonized_col_dataset,'` you declared is not ',
-'in your DataSchema.',
+'in your DataSchema. An additional variable has been created with harmonized 
+dataset names as values for each harmonized dataset.',
 bold("\n\nUseful tip:\n"),
-'To avoid this error, we recommend to set `harmonized_col_dataset` as a 
-categorical variable DataSchema, or to set `add_col_dataset` = FALSE.')
-    
-    }
-  }
+'To avoid this warning, we recommend to set `harmonized_col_dataset` as a 
+categorical variable DataSchema.')}
   
-  pooled_harmonized_dataset <-
+  pooled_harmonized_dataset <- 
     pooled_harmonized_dataset %>%
-    bind_cols(col_dataset) %>%
-    mutate(across(any_of(harmonized_col_dataset), as_category))
-
+    data_dict_apply(dataschema)
+  
   attributes(pooled_harmonized_dataset)$`Rmonize::class` <- 
     "pooled_harmonized_dataset"
   
   attributes(pooled_harmonized_dataset)$`Rmonize::harmonized_col_id` <- 
     harmonized_col_id
   
-  if(!is.null(harmonized_col_dataset)){
-    attributes(pooled_harmonized_dataset)$`Rmonize::harmonized_col_dataset` <- 
-      harmonized_col_dataset}
-
+  attributes(pooled_harmonized_dataset)$`Rmonize::harmonized_col_dataset` <- 
+    harmonized_col_dataset
+  
   return(pooled_harmonized_dataset)
 }
 
@@ -2571,7 +2687,7 @@ categorical variable DataSchema, or to set `add_col_dataset` = FALSE.')
 #' in particular [Opal environments](https://www.obiba.org/pages/products/opal/).
 #'
 #' @seealso
-#' For a better assessment, please use [dataschema_evaluate()].
+#' [dataschema_evaluate()].
 #'
 #' @param object A potential DataSchema object to be evaluated.
 #'
@@ -2581,10 +2697,10 @@ categorical variable DataSchema, or to set `add_col_dataset` = FALSE.')
 #' @examples
 #' {
 #' 
-#' # use Rmonize_DEMO provided by the package
+#' # use Rmonize_examples provided by the package
 #'
-#' dataschema <- Rmonize_DEMO$`dataschema - final`
-#' is_dataschema_mlstr(dataschema)
+#' is_dataschema_mlstr(Rmonize_examples$`DataSchema`)
+#' is_dataschema_mlstr(Rmonize_examples$`Data_Processing_Elements_no_errors`)
 #' is_dataschema_mlstr(iris)
 #'
 #'}
@@ -2621,7 +2737,7 @@ is_dataschema_mlstr <- function(object){
 #' must also be unique.
 #'
 #' @seealso
-#' For a better assessment, please use [dataschema_evaluate()].
+#' [dataschema_evaluate()].
 #'
 #' @param object A potential DataSchema object to be evaluated.
 #'
@@ -2631,10 +2747,10 @@ is_dataschema_mlstr <- function(object){
 #' @examples
 #' {
 #' 
-#' # use Rmonize_DEMO provided by the package
-#'
-#' dataschema <- Rmonize_DEMO$`dataschema - final`
-#' is_dataschema(dataschema)
+#' # Use Rmonize_examples to run examples.
+#' 
+#' is_dataschema(Rmonize_examples$`DataSchema`)
+#' is_dataschema(Rmonize_examples$`Data_Processing_Elements_no_errors`)
 #' is_dataschema(iris)
 #'
 #'}
@@ -2662,13 +2778,13 @@ is_dataschema <- function(object){
 #' be used to check if an object is valid for use in a function.
 #'
 #' @details
-#' The Data Processing Elements specifies the algorithms used to process input 
-#' variables into harmonized variables in the DataSchema format. It is also 
-#' contains metadata used to generate documentation of the processing. 
-#' A Data Processing Elements object is a data frame with specific columns 
-#' used in data processing: `dataschema_variable`, `input_dataset`, 
-#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`. 
-#' To initiate processing, the first entry must be the creation of a harmonized 
+#' The Data Processing Elements specifies the input elements and processing algorithms 
+#' to generate harmonized variables in the DataSchema formats. It is also
+#' contains metadata used to generate documentation of the processing.
+#' A Data Processing Elements object is a data frame with specific columns
+#' used in data processing: `dataschema_variable`, `input_dataset`,
+#' `input_variables`, `Mlstr_harmo::rule_category` and `Mlstr_harmo::algorithm`.
+#' To initiate processing, the first entry must be the creation of a harmonized
 #' primary identifier variable (e.g., participant unique ID).
 #'
 #' @param object A potential Data Processing Elements object to be evaluated.
@@ -2679,12 +2795,11 @@ is_dataschema <- function(object){
 #' @examples
 #' {
 #' 
-#' # use Rmonize_DEMO provided by the package
-#'
-#' data_proc_elem <- Rmonize_DEMO$`data_processing_elements - final`
-#' is_data_proc_elem(data_proc_elem)
+#' # Use Rmonize_examples to run examples.
+#' 
+#' is_data_proc_elem(Rmonize_examples$`Data_Processing_Elements_no_errors`)
+#' is_data_proc_elem(Rmonize_examples$`DataSchema`)
 #' is_data_proc_elem(iris)
-#'
 #'}
 #'
 #' @import dplyr tidyr fabR
